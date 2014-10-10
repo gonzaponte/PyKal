@@ -37,12 +37,13 @@ class KalmanNode:
         Contains all the information about a given step. Contains the index of the step, the hit, the predicted, filtered and smoothed states and residuals as well as the chi2 and the cumulative chi2 of the step.
     '''
     
-    def __init__( self, step = 0, hit = KalmanMeasurement(),
+    def __init__( self, step = 0, running = run, hit = KalmanMeasurement(),
                   pred_state = KalmanMeasurement(), filt_state = KalmanMeasurement(), smooth_state = KalmanMeasurement(),
                   pred_resid = KalmanMeasurement(), filt_resid = KalmanMeasurement(), smooth_resid = KalmanMeasurement(),
                   chi2       = -1, cumchi2 = -1 ):
 
         self.step         = step
+        self.running      = run
         self.hit          = hit
         self.pred_state   = pred_state
         self.filt_state   = filt_state
@@ -59,26 +60,28 @@ class KalmanNode:
         '''
         return '''
 step number {0}
+running variable value {1}
 hit:
-{1}
-predicted state:
 {2}
-filtered state:
+predicted state:
 {3}
-smoothed state:
+filtered state:
 {4}
-predicted residuals:
+smoothed state:
 {5}
-filtered residuals:
+predicted residuals:
 {6}
-smoothed residuals:
+filtered residuals:
 {7}
-chi2 of this node:
+smoothed residuals:
 {8}
-cumulative chi2 at this node:
+chi2 of this node:
 {9}
-'''.format( self.step, self.hit, self.pred_state, self.filt_state, self.smooth_state,
-                                 self.pred_resid, self.filt_resid, self.smooth_resid,
+cumulative chi2 at this node:
+{10}
+'''.format( self.step, self.hit, self.running
+            self.pred_state, self.filt_state, self.smooth_state,
+            self.pred_resid, self.filt_resid, self.smooth_resid,
             self.chi2, self.cumchi2 )
 
 class KalmanTrack:
@@ -129,14 +132,14 @@ class KalmanFilter:
         '''
             Sets "state" as the initial state of the Kalman filter, both as the predicted state and the filtered state.
         '''
-        first_node = self.Track.GetNode(0)
+        first_node            = self.Track.GetNode(0)
         first_node.pred_state = state
         first_node.filt_state = state
         first_node.pred_resid = 0. #I still dont know what should be there
         first_node.filt_resid = 0. #I still dont know what should be there
         first_node.chi2       = 0.
         first_node.cumchi2    = 0.
-        self.ndim  = len(state)
+        self.ndim             = len(state)
         self.HaveInitialState = True
     
     def SetInitialGuess( self, guess = None ):
@@ -145,13 +148,13 @@ class KalmanFilter:
         '''
         self.guess = guess if guess else self._ComputeInitialGuess()
     
-    def SetMeasurements( self, hits ):
+    def SetMeasurements( self, runs, hits ):
         '''
             Sets "hits" as the measurements of the track.
         '''
-
-        for i,hit in enumerate(hits):
-            self.Track.AddNode( KalmanNode(step = i, hit = hit) )
+        indices = range(len(runs))
+        for i,r,hit in zip( indices, runs, hits ):
+            self.Track.AddNode( KalmanNode( step = i, run = r, hit = hit) )
         self.HaveMeasurements = True # Now we can compute stuff
 
     def _ComputeInitialGuess( self ):
