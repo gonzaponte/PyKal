@@ -37,13 +37,13 @@ class KalmanNode:
         Contains all the information about a given step. Contains the index of the step, the hit, the predicted, filtered and smoothed states and residuals as well as the chi2 and the cumulative chi2 of the step.
     '''
     
-    def __init__( self, step = 0, running = run, hit = KalmanMeasurement(),
+    def __init__( self, step = 0, running = 0, hit = KalmanMeasurement(),
                   pred_state = KalmanMeasurement(), filt_state = KalmanMeasurement(), smooth_state = KalmanMeasurement(),
                   pred_resid = KalmanMeasurement(), filt_resid = KalmanMeasurement(), smooth_resid = KalmanMeasurement(),
                   chi2       = -1, cumchi2 = -1 ):
 
         self.step         = step
-        self.running      = run
+        self.running      = running
         self.hit          = hit
         self.pred_state   = pred_state
         self.filt_state   = filt_state
@@ -79,7 +79,7 @@ chi2 of this node:
 {9}
 cumulative chi2 at this node:
 {10}
-'''.format( self.step, self.hit, self.running
+'''.format( self.step, self.hit, self.running,
             self.pred_state, self.filt_state, self.smooth_state,
             self.pred_resid, self.filt_resid, self.smooth_resid,
             self.chi2, self.cumchi2 )
