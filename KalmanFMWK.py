@@ -107,7 +107,44 @@ class KalmanTrack:
             Return the node.
         '''
         return self.nodes[index]
+    
+    def Plot( self ):
+        '''
+            Plot the track.
+        '''
+        import ROOT
+        xmeasurements = ROOT.TGraph()
+        ymeasurements = ROOT.TGraph()
+        xfiltered     = ROOT.TGraph()
+        yfiltered     = ROOT.TGraph()
+        
+        xmeasurements.SetMarkerStyle(20)
+        ymeasurements.SetMarkerStyle(20)
+        xfiltered.SetMarkerStyle(29)
+        yfiltered.SetMarkerStyle(29)
 
+        xmeasurements.SetMarkerColor(1)
+        ymeasurements.SetMarkerColor(1)
+        xfiltered.SetMarkerColor(3)
+        yfiltered.SetMarkerColor(3)
+
+        for node in self.nodes[:-1]:
+            print node.step, node.hit.Vector[0], node.filt_state.Vector[0], node.hit.Vector[1], node.filt_state.Vector[1]
+            xmeasurements.SetPoint( node.step, node.running, node.hit.Vector[0] )
+            ymeasurements.SetPoint( node.step, node.running, node.hit.Vector[1] )
+            xfiltered    .SetPoint( node.step, node.running, node.filt_state.Vector[0] )
+            yfiltered    .SetPoint( node.step, node.running, node.filt_state.Vector[1] )
+
+        cx = ROOT.TCanvas()
+        xmeasurements.Draw('AP')
+        xfiltered.Draw('P')
+
+        cy = ROOT.TCanvas()
+        ymeasurements.Draw('AP')
+        yfiltered.Draw('P')
+
+        return cx, xmeasurements, xfiltered, cy, ymeasurements, yfiltered
+        
     def __str__( self ):
         '''
             String representation for printing purposes.
@@ -118,6 +155,7 @@ class KalmanFilter:
     '''
         Abstract implementation of the Kalman Filter.
     '''
+    
     def __init__( self, name = 'KalmanFilter' ):
         '''
             Initializer. It is needed to call the SetInitialState and SetMeasurements methods mandatorily.
@@ -135,11 +173,12 @@ class KalmanFilter:
         first_node            = self.Track.GetNode(0)
         first_node.pred_state = state
         first_node.filt_state = state
-        first_node.pred_resid = 0. #I still dont know what should be there
-        first_node.filt_resid = 0. #I still dont know what should be there
+        first_node.pred_resid = self.MeasurementMatrix(0) * 0.
+        first_node.filt_resid = self.MeasurementMatrix(0) * 0.
         first_node.chi2       = 0.
         first_node.cumchi2    = 0.
-        self.ndim             = len(state)
+        self.state_dim        = len(state)
+        self.measurement_dim  = len(first_node.hit.Vector)
         self.HaveInitialState = True
     
     def SetInitialGuess( self, guess = None ):
@@ -154,7 +193,7 @@ class KalmanFilter:
         '''
         indices = range(len(runs))
         for i,r,hit in zip( indices, runs, hits ):
-            self.Track.AddNode( KalmanNode( step = i, run = r, hit = hit) )
+            self.Track.AddNode( KalmanNode( step = i, running = r, hit = hit) )
         self.HaveMeasurements = True # Now we can compute stuff
 
     def _ComputeInitialGuess( self ):
@@ -197,7 +236,7 @@ class KalmanFilter:
         self.prev_node  = self.Track.GetNode( index - 1 )
         self.this_node  = self.Track.GetNode( index )
         self.next_node  = self.Track.GetNode( index + 1 )
-        self.this_hit   = self.this_node.hit
+        self.this_hit   = self.this_node.hit.Vector
         self.prev_state = self.prev_node.filt_state.Vector
         self.prev_cov   = self.prev_node.filt_state.CovarianceMatrix
         self.MSMatrix   = self.MultipleScatteringMatrix( index )
@@ -229,11 +268,11 @@ class KalmanFilter:
             Filter the index-th step.
         '''
         C_filtered = ( self.this_node.pred_state.CovarianceMatrix.Inverse() + self.MMMatrixT ** self.NMatrixI ** self.MMMatrix ).Inverse()
-        GainMatrix = C_filtered ** self.MMMatrixT ** NMatrixI
+        GainMatrix = C_filtered ** self.MMMatrixT ** self.NMatrixI
         x_filtered = self.prev_state + GainMatrix ** ( self.this_hit - self.MMMatrix ** self.prev_state )
         
-        projector  = Array.Identity( self.ndim ) - self.MMMatrix ** GainMatrix
-        r_filtered = projector ** self.this_node.pred_resid
+        projector  = Array.Identity( self.measurement_dim ) - self.MMMatrix ** GainMatrix
+        r_filtered = projector ** self.this_node.pred_resid.Vector
         R_filtered = projector ** self.NMatrix
         
         chi2plus = r_filtered ** R_filtered.Inverse() ** r_filtered
@@ -257,12 +296,12 @@ class KalmanFilter:
         if self.guess is None:
             self._ComputeInitialGuess()
         
-        for i in range( 1, self.Track.nnodes ):
+        for i in range( 1, self.Track.nnodes - 1 ):
             self._NewNode( i )
             self.Predict( i )
             self.Filter( i )
-        for i in reversed(range( self.Track.nnodes - 1 )):
-            self.NewNode( i )
+        for i in reversed(range( 1, self.Track.nnodes - 1 )):
+            self._NewNode( i )
             self.Smooth( i )
 
         return self.Track
