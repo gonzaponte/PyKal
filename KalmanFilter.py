@@ -57,14 +57,14 @@ class NEXTKalmanFilter(KalmanFMWK.KalmanFilter):
                              [ -z0 *p3p4, -z0 *p4p4,     p3p4,     p4p4])
 
     def NoiseMatrix( self, index ):
-        return Array.Identity( self.N )
+        return Array.Identity( 2 ) * 0.01
 
 class NEXTKalmanFilterBis(KalmanFMWK.KalmanFilter):
     Ndim = 4
     xyresolution = 0.1 # cm
     
     def __init__( self, p0 = 2.49 ): # MeV
-        KalmanFilter.__init__( self, name = 'NEXT Kalman Filter' )
+        KalmanFMWK.KalmanFilter.__init__( self, name = 'NEXT Kalman Filter' )
         self.p0 = p0
         self.p  = p0
     
@@ -80,7 +80,7 @@ class NEXTKalmanFilterBis(KalmanFMWK.KalmanFilter):
         z0   = self.Track.GetNode(index).running
         z02  = z0**2;
         edep = self.this_hit[-1]
-        L    = abs( self.next_node.running - z0 ) / Xe.x0
+        L    = abs( self.next_node.running - z0 ) / Physics.Xe.x0
         
         p1, p2, p3, p4 = self.prev_state
         
@@ -122,13 +122,20 @@ class PyKal( ialex.IAlg ):
 
 if __name__ == '__main__':
     import ROOT
-    R = ROOT.TRandom3(0)
-    V = Array.Matrix( [0.1**2,0.], [0.,0.1**2] )
-    measurements = [ ( R.Gaus(0,1), R.Gaus(0,1) ) for i in range(100) ]
+    R            = ROOT.TRandom3(0)
+    V            = Array.Matrix( [0.1**2,0.], [0.,0.1**2] )
+    hits         = [ Array.Vector( R.Gaus(0,1), R.Gaus(0,1) ) for i in range(100) ]
     runnings     = map( float, range(100) )
-
+    measurements = [ KalmanFMWK.KalmanMeasurement( h, V ) for h in hits ]
+    istate       = Array.Vector( 0., 0., 0., 0. )
+    icvmatrix    = Array.Identity(4)
+    
     nextkf = NEXTKalmanFilterBis( 2.49 )
-    nextkf.SetMeasurements()
+    nextkf.SetMeasurements( runnings, measurements )
+    nextkf.SetInitialState( KalmanFMWK.KalmanMeasurement( istate, icvmatrix ) )
+    track = nextkf.Fit()
+    p = track.Plot()
+    raw_input()
 
 #    import ROOT
 #    
