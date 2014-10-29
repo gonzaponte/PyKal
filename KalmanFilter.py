@@ -60,6 +60,9 @@ class NEXTKalmanFilter(KalmanFMWK.KalmanFilter):
         return Array.Identity( 2 ) * 0.01
 
 class NEXTKalmanFilterBis(KalmanFMWK.KalmanFilter):
+    '''
+        State = ( x - dz tanx, y - dz tany, tanx, tany )
+    '''
     Ndim = 4
     xyresolution = 0.1 # cm
     
@@ -72,9 +75,9 @@ class NEXTKalmanFilterBis(KalmanFMWK.KalmanFilter):
         return Array.Identity( self.Ndim )
     
     def MeasurementMatrix( self, index ):
-        z0 = - self.Track.GetNode(index).running
-        return Array.Matrix( [ 1., 0., z0, 0. ],
-                             [ 0., 1., 0., z0 ])
+        dz = self.Track.GetNode(index).running - self.Track.GetNode(index-1).running
+        return Array.Matrix( [ 1., 0., dz, 0. ],
+                             [ 0., 1., 0., dz ])
     
     def MultipleScatteringMatrix( self, index ):
         z0   = self.Track.GetNode(index).running
@@ -96,8 +99,8 @@ class NEXTKalmanFilterBis(KalmanFMWK.KalmanFilter):
                              [ -z0  * p3p4, -z0  * p4p4,       p3p4,       p4p4 ])
     
     def NoiseMatrix( self, index ):
-        return Array.Matrix( [ [ self.xyresolution**2,                   0. ],
-                               [                   0., self.xyresolution**2 ]] )
+        return Array.Matrix( [ [ 1., 0. ],
+                               [ 0., 1. ]] ) * self.xyresolution**2
 
 class PyKal( ialex.IAlg ):
     def __init__( self, measurements = [], name = 'NEXTKalmanFilter' ):

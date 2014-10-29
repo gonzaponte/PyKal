@@ -129,7 +129,7 @@ class KalmanTrack:
         yfiltered.SetMarkerColor(3)
 
         for node in self.nodes[:-1]:
-            print node.step, node.hit.Vector[0], node.filt_state.Vector[0], node.hit.Vector[1], node.filt_state.Vector[1]
+#            print node.step, node.hit.Vector[0], node.filt_state.Vector[0], node.hit.Vector[1], node.filt_state.Vector[1]
             xmeasurements.SetPoint( node.step, node.running, node.hit.Vector[0] )
             ymeasurements.SetPoint( node.step, node.running, node.hit.Vector[1] )
             xfiltered    .SetPoint( node.step, node.running, node.filt_state.Vector[0] )
