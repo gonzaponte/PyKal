@@ -21,6 +21,12 @@ class KalmanMeasurement:
             Return the dimension of the state vector.
         '''
         return len(self.Vector)
+    
+    def __bool__( self ):
+        '''
+            False if empty.
+        '''
+        return bool( len(self) )
 
     def __str__( self ):
         '''
@@ -37,7 +43,7 @@ class KalmanNode:
         Contains all the information about a given step. Contains the index of the step, the hit, the predicted, filtered and smoothed states and residuals as well as the chi2 and the cumulative chi2 of the step.
     '''
     
-    def __init__( self, step = 0, running = 0, hit = KalmanMeasurement(),
+    def __init__( self, step = 0, running = 0, hit = KalmanMeasurement(), true_hit = KalmanMeasurement()
                   pred_state = KalmanMeasurement(), filt_state = KalmanMeasurement(), smooth_state = KalmanMeasurement(),
                   pred_resid = KalmanMeasurement(), filt_resid = KalmanMeasurement(), smooth_resid = KalmanMeasurement(),
                   chi2       = -1, cumchi2 = -1 ):
@@ -45,6 +51,7 @@ class KalmanNode:
         self.step         = step
         self.running      = running
         self.hit          = hit
+        self.true_hit     = true_hit
         self.pred_state   = pred_state
         self.filt_state   = filt_state
         self.smooth_state = smooth_state
@@ -61,25 +68,27 @@ class KalmanNode:
         return '''
 step number {0}
 running variable value {1}
-hit:
+true hit:
 {2}
-predicted state:
+hit:
 {3}
-filtered state:
+predicted state:
 {4}
-smoothed state:
+filtered state:
 {5}
-predicted residuals:
+smoothed state:
 {6}
-filtered residuals:
+predicted residuals:
 {7}
-smoothed residuals:
+filtered residuals:
 {8}
-chi2 of this node:
+smoothed residuals:
 {9}
-cumulative chi2 at this node:
+chi2 of this node:
 {10}
-'''.format( self.step, self.hit, self.running,
+cumulative chi2 at this node:
+{11}
+'''.format( self.step, self.running, self.true_hit, self.hit,
             self.pred_state, self.filt_state, self.smooth_state,
             self.pred_resid, self.filt_resid, self.smooth_resid,
             self.chi2, self.cumchi2 )
@@ -180,6 +189,7 @@ class KalmanFilter:
         self.state_dim        = len(state)
         self.measurement_dim  = len(first_node.hit.Vector)
         self.HaveInitialState = True
+        self.HaveTrue         = True
     
     def SetInitialGuess( self, guess = None ):
         '''
@@ -187,6 +197,18 @@ class KalmanFilter:
         '''
         self.guess = guess if guess else self._ComputeInitialGuess()
     
+    def SetTrue( self, hits ):
+        '''
+            Sets "hits" as the true hits of the track.
+        '''
+        if not self.HaveMeasurements:
+            print 'True hits cannot be setted before measurements. True hits not included.'
+            return
+        indices = range(len(hits))
+        for i,hit in zip( indices, hits ):
+            self.Track.GetNode( i ).true_hit = hit
+        self.HaveTrue = True
+
     def SetMeasurements( self, runs, hits ):
         '''
             Sets "hits" as the measurements of the track.
