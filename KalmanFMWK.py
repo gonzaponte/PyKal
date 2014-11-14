@@ -43,7 +43,7 @@ class KalmanNode:
         Contains all the information about a given step. Contains the index of the step, the hit, the predicted, filtered and smoothed states and residuals as well as the chi2 and the cumulative chi2 of the step.
     '''
     
-    def __init__( self, step = 0, running = 0, hit = KalmanMeasurement(), true_hit = KalmanMeasurement()
+    def __init__( self, step = 0, running = 0, hit = KalmanMeasurement(), true_hit = KalmanMeasurement(),
                   pred_state = KalmanMeasurement(), filt_state = KalmanMeasurement(), smooth_state = KalmanMeasurement(),
                   pred_resid = KalmanMeasurement(), filt_resid = KalmanMeasurement(), smooth_resid = KalmanMeasurement(),
                   chi2       = -1, cumchi2 = -1 ):
@@ -268,7 +268,17 @@ class KalmanFilter:
         self.TMatrixT   = self.TMatrix.T()
         self.NMatrix    = self.NoiseMatrix( index )
         self.NMatrixI   = self.NMatrix.Inverse()
-
+    
+#        print self.this_hit
+#        print self.prev_state
+#        print self.prev_cov
+#        print self.MSMatrix
+#        print self.MMMatrix
+#        print self.MMMatrixT
+#        print self.TMatrix
+#        print self.TMatrixT
+#        print self.NMatrix
+#        print self.NMatrixI
 
     def Predict( self, index ):
         '''
@@ -281,7 +291,10 @@ class KalmanFilter:
         C_predicted = self.TMatrix ** self.prev_cov ** self.TMatrixT + self.MSMatrix
         r_predicted = self.this_hit - self.MMMatrix ** x_predicted
         R_predicted = self.NMatrix + self.MMMatrix ** C_predicted ** self.MMMatrixT
-    
+        
+#        print x_predicted
+#        print C_predicted
+#        raise KeyboardInterrupt()
         self.this_node.pred_state = KalmanMeasurement( x_predicted, C_predicted )
         self.this_node.pred_resid = KalmanMeasurement( r_predicted, R_predicted )
         
@@ -299,6 +312,11 @@ class KalmanFilter:
         
         chi2plus = r_filtered ** R_filtered.Inverse() ** r_filtered
         newchi2  = self.prev_node.cumchi2 + chi2plus
+        
+        print x_filtered
+        print C_filtered
+        print chi2plus
+        raise KeyboardInterrupt()
         
         self.this_node.filt_state = KalmanMeasurement( x_filtered, C_filtered )
         self.this_node.filt_resid = KalmanMeasurement( r_filtered, R_filtered )
