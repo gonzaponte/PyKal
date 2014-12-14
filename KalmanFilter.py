@@ -76,6 +76,7 @@ class NEXTKalmanFilterBis(KalmanFMWK.KalmanFilter):
     
     def MeasurementMatrix( self, index ):
         dz = self.Track.GetNode(index).running - self.Track.GetNode(index-1).running
+        dz = - dz
         return Array.Matrix( [ 1., 0., dz, 0. ],
                              [ 0., 1., 0., dz ])
     
@@ -83,7 +84,10 @@ class NEXTKalmanFilterBis(KalmanFMWK.KalmanFilter):
         z0   = self.Track.GetNode(index).running
         z02  = z0**2;
         edep = self.this_hit[-1]
-        L    = abs( self.next_node.running - z0 ) / Physics.Xe.x0
+        try:
+            L    = abs( self.Track.GetNode(index+1).running - z0 ) / Physics.Xe.x0
+        except:
+            L    = 1e3
         
         p1, p2, p3, p4 = self.prev_state
         
@@ -99,8 +103,7 @@ class NEXTKalmanFilterBis(KalmanFMWK.KalmanFilter):
                              [ -z0  * p3p4, -z0  * p4p4,       p3p4,       p4p4 ])
     
     def NoiseMatrix( self, index ):
-        return Array.Matrix( [ [ 1., 0. ],
-                               [ 0., 1. ]] ) * self.xyresolution**2
+        return Array.Identity(2) * self.xyresolution**2
 
 class PyKal( ialex.IAlg ):
     def __init__( self, measurements = [], name = 'NEXTKalmanFilter' ):
@@ -121,23 +124,60 @@ class PyKal( ialex.IAlg ):
     def finalize( self ):
         return
 
+class TrigoKF( KalmanFMWK.KalmanFilter ):
+    '''
+        State = ( x, y, tantheta, tanphi )
+    '''
+    Ndim = 4
+    xyresolution = 0.1 # cm
+    
+    def __init__( self ):
+        KalmanFMWK.KalmanFilter.__init__( self, name = 'Trigo Kalman Filter' )
+    
+    def TransportMatrix( self, index ):
+        z = self.Track.GetNode(index).running
+        return Array.Matrix( [ 1., 0., z , 1. ],
+                             [ 0., 1., z , 0. ],
+                             [ 0., 0., 1., 0. ],
+                             [ 0., 0., 0., 1. ])
+    
+    def MeasurementMatrix( self, index ):
+        return Array.Matrix( [ 1., 0., 0., 0. ],
+                             [ 0., 1., 0., 0. ])
+    
+    def MultipleScatteringMatrix( self, index ):
+        return Array.Identity(4)
+    
+    def NoiseMatrix( self, index ):
+        return Array.Identity(2) * self.xyresolution**2
+
 
 
 if __name__ == '__main__':
     import ROOT
     R            = ROOT.TRandom3(0)
-    V            = Array.Matrix( [0.1**2,0.], [0.,0.1**2] )
-    hits         = [ Array.Vector( R.Gaus(0,1), R.Gaus(0,1) ) for i in range(100) ]
-    runnings     = map( float, range(100) )
+    V            = Array.Identity(2) * 0.01
+    Nhits        = 500
+    hits         = [ Array.Vector( math.sin(0.01*i) + R.Gaus(0,.1), -math.cos(0.1*i) + R.Gaus(0,.1) ) for i in range(Nhits) ]
+    runnings     = map( float, range(Nhits) )
     measurements = [ KalmanFMWK.KalmanMeasurement( h, V ) for h in hits ]
+    istate       = Array.Vector( hits[0][0], hits[0][1], 0., 0. )
     istate       = Array.Vector( 0., 0., 0., 0. )
-    icvmatrix    = Array.Identity(4)
+    icvmatrix    = Array.Identity(4) * 2
     
     nextkf = NEXTKalmanFilterBis( 2.49 )
+    nextkf = TrigoKF()
     nextkf.SetMeasurements( runnings, measurements )
     nextkf.SetInitialState( KalmanFMWK.KalmanMeasurement( istate, icvmatrix ) )
     track = nextkf.Fit()
     p = track.Plot()
+    p3 = track.Plot3D()
+    cchi = ROOT.TCanvas()
+    chi2 = ROOT.TGraph()
+    chi2.SetMarkerStyle(20)
+    for i in range(Nhits):
+        chi2.SetPoint(i,i,track.GetNode(i).chi2)
+    chi2.Draw('AP')
     raw_input()
 
 #    import ROOT

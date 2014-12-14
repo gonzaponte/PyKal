@@ -126,34 +126,69 @@ class KalmanTrack:
         ymeasurements = ROOT.TGraph()
         xfiltered     = ROOT.TGraph()
         yfiltered     = ROOT.TGraph()
+        xsmoothed     = ROOT.TGraph()
+        ysmoothed     = ROOT.TGraph()
         
         xmeasurements.SetMarkerStyle(20)
         ymeasurements.SetMarkerStyle(20)
         xfiltered.SetMarkerStyle(29)
         yfiltered.SetMarkerStyle(29)
+        xsmoothed.SetMarkerStyle(34)
+        ysmoothed.SetMarkerStyle(34)
 
         xmeasurements.SetMarkerColor(1)
         ymeasurements.SetMarkerColor(1)
         xfiltered.SetMarkerColor(3)
         yfiltered.SetMarkerColor(3)
+        xsmoothed.SetMarkerColor(34)
+        ysmoothed.SetMarkerColor(34)
 
         for node in self.nodes[:-1]:
-#            print node.step, node.hit.Vector[0], node.filt_state.Vector[0], node.hit.Vector[1], node.filt_state.Vector[1]
             xmeasurements.SetPoint( node.step, node.running, node.hit.Vector[0] )
             ymeasurements.SetPoint( node.step, node.running, node.hit.Vector[1] )
             xfiltered    .SetPoint( node.step, node.running, node.filt_state.Vector[0] )
             yfiltered    .SetPoint( node.step, node.running, node.filt_state.Vector[1] )
+            xsmoothed    .SetPoint( node.step, node.running, node.smooth_state.Vector[0] )
+            ysmoothed    .SetPoint( node.step, node.running, node.smooth_state.Vector[1] )
 
         cx = ROOT.TCanvas()
         xmeasurements.Draw('AP')
         xfiltered.Draw('P')
+        xsmoothed.Draw('P')
 
         cy = ROOT.TCanvas()
         ymeasurements.Draw('AP')
         yfiltered.Draw('P')
-
-        return cx, xmeasurements, xfiltered, cy, ymeasurements, yfiltered
+        ysmoothed.Draw('P')
         
+        return cx, xmeasurements, xfiltered, xsmoothed, cy, ymeasurements, yfiltered, ysmoothed
+    
+    def Plot3D( self ):
+        import ROOT
+        measurements = ROOT.TGraph2D()
+        filtered     = ROOT.TGraph2D()
+        smoothed     = ROOT.TGraph2D()
+        
+        measurements.SetMarkerStyle(20)
+        filtered    .SetLineWidth(2)
+        smoothed    .SetLineWidth(2)
+        
+        measurements.SetMarkerColor(1)
+        filtered    .SetLineColor(2)
+        smoothed    .SetLineColor(4)
+        
+        for node in self.nodes[:-1]:
+            measurements.SetPoint( node.step, node.running, node.hit.Vector[0]         , node.hit.Vector[1]          )
+            filtered    .SetPoint( node.step, node.running, node.filt_state.Vector[0]  , node.filt_state.Vector[1]   )
+            smoothed    .SetPoint( node.step, node.running, node.smooth_state.Vector[0], node.smooth_state.Vector[1] )
+        
+        c = ROOT.TCanvas()
+        measurements.Draw('AP')
+        filtered    .Draw('Clinesame')
+        smoothed    .Draw('Clinesame')
+        
+        return c, measurements, filtered, smoothed
+    
     def __str__( self ):
         '''
             String representation for printing purposes.
@@ -182,8 +217,8 @@ class KalmanFilter:
         first_node            = self.Track.GetNode(0)
         first_node.pred_state = state
         first_node.filt_state = state
-        first_node.pred_resid = self.MeasurementMatrix(0) * 0.
-        first_node.filt_resid = self.MeasurementMatrix(0) * 0.
+        first_node.pred_resid = first_node.hit.Vector * 0.
+        first_node.filt_resid = first_node.hit.CovarianceMatrix * 0.
         first_node.chi2       = 0.
         first_node.cumchi2    = 0.
         self.state_dim        = len(state)
@@ -256,11 +291,12 @@ class KalmanFilter:
         '''
         
         self.prev_node  = self.Track.GetNode( index - 1 )
-        self.this_node  = self.Track.GetNode( index )
-        self.next_node  = self.Track.GetNode( index + 1 )
+        self.this_node  = self.Track.GetNode( index     )
+        
         self.this_hit   = self.this_node.hit.Vector
         self.prev_state = self.prev_node.filt_state.Vector
         self.prev_cov   = self.prev_node.filt_state.CovarianceMatrix
+        
         self.MSMatrix   = self.MultipleScatteringMatrix( index )
         self.MMMatrix   = self.MeasurementMatrix( index )
         self.MMMatrixT  = self.MMMatrix.T()
@@ -269,17 +305,6 @@ class KalmanFilter:
         self.NMatrix    = self.NoiseMatrix( index )
         self.NMatrixI   = self.NMatrix.Inverse()
     
-#        print self.this_hit
-#        print self.prev_state
-#        print self.prev_cov
-#        print self.MSMatrix
-#        print self.MMMatrix
-#        print self.MMMatrixT
-#        print self.TMatrix
-#        print self.TMatrixT
-#        print self.NMatrix
-#        print self.NMatrixI
-
     def Predict( self, index ):
         '''
             Predict the value for step "index".
@@ -292,9 +317,6 @@ class KalmanFilter:
         r_predicted = self.this_hit - self.MMMatrix ** x_predicted
         R_predicted = self.NMatrix + self.MMMatrix ** C_predicted ** self.MMMatrixT
         
-#        print x_predicted
-#        print C_predicted
-#        raise KeyboardInterrupt()
         self.this_node.pred_state = KalmanMeasurement( x_predicted, C_predicted )
         self.this_node.pred_resid = KalmanMeasurement( r_predicted, R_predicted )
         
@@ -302,7 +324,9 @@ class KalmanFilter:
         '''
             Filter the index-th step.
         '''
-        C_filtered = ( self.this_node.pred_state.CovarianceMatrix.Inverse() + self.MMMatrixT ** self.NMatrixI ** self.MMMatrix ).Inverse()
+        this_cov = self.this_node.pred_state.CovarianceMatrix
+        
+        C_filtered = ( this_cov.Inverse() + self.MMMatrixT ** self.NMatrixI ** self.MMMatrix ).Inverse()
         GainMatrix = C_filtered ** self.MMMatrixT ** self.NMatrixI
         x_filtered = self.prev_state + GainMatrix ** ( self.this_hit - self.MMMatrix ** self.prev_state )
         
@@ -313,21 +337,33 @@ class KalmanFilter:
         chi2plus = r_filtered ** R_filtered.Inverse() ** r_filtered
         newchi2  = self.prev_node.cumchi2 + chi2plus
         
-        print x_filtered
-        print C_filtered
-        print chi2plus
-        raise KeyboardInterrupt()
-        
         self.this_node.filt_state = KalmanMeasurement( x_filtered, C_filtered )
         self.this_node.filt_resid = KalmanMeasurement( r_filtered, R_filtered )
         self.this_node.chi2       = chi2plus
         self.this_node.cumchi2    = newchi2
     
     def Smooth( self, index ):
-        return
-        #Still not working
-        GainMatrix = self.this_node.filt_state.CovarianceMatrix ** self.TMatrixT ** self.next_node.pred_state.CovarianceMatrix.Inverse()
-        x_smooth   = self.this_node.filt_state.Vector + GainMatrix# ** ( ??? )
+        '''
+            Smooth the index-th step.
+        '''
+        self.next_node  = self.Track.GetNode( index + 1 )
+        
+        this_state  = self.this_node.filt_state.Vector
+        this_cov    = self.this_node.filt_state.CovarianceMatrix
+        next_pstate = self.next_node.pred_state.Vector
+        next_pcov   = self.next_node.pred_state.CovarianceMatrix
+        next_sstate = self.next_node.smooth_state.Vector
+        next_scov   = self.next_node.smooth_state.CovarianceMatrix
+        
+        GainMatrix = this_cov ** self.TMatrixT ** next_pcov.Inverse()
+        x_smooth   = this_state + GainMatrix ** ( next_sstate - next_pstate )
+        C_smooth   = this_cov   + GainMatrix ** ( next_scov   - next_pcov   ) ** GainMatrix.T()
+        
+        r_smooth   = self.this_hit - self.MMMatrix ** x_smooth
+        R_smooth   = self.NMatrix - self.MMMatrix ** C_smooth ** self.MMMatrixT
+    
+        self.this_node.smooth_state = KalmanMeasurement( x_smooth, C_smooth )
+        self.this_node.smooth_resid = KalmanMeasurement( r_smooth, R_smooth )
     
     def Fit( self ):
         assert self.HaveInitialState and self.HaveMeasurements, '''
@@ -336,11 +372,15 @@ class KalmanFilter:
         if self.guess is None:
             self._ComputeInitialGuess()
         
-        for i in range( 1, self.Track.nnodes - 1 ):
+        for i in range( 1, self.Track.nnodes ):
             self._NewNode( i )
             self.Predict( i )
             self.Filter( i )
-        for i in reversed(range( 1, self.Track.nnodes - 1 )):
+        
+        self.this_node.smooth_state = self.this_node.filt_state
+        self.this_node.smooth_resid = self.this_node.filt_resid
+        
+        for i in reversed(range( self.Track.nnodes - 1 )):
             self._NewNode( i )
             self.Smooth( i )
 
