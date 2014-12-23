@@ -1,7 +1,7 @@
-import ialex
+#import ialex
 import Array
 import math
-import KalmanFMWK
+import KalmanFilter
 import Physics
 
 def Beta( p, m = Physics.Constants.me ):
@@ -16,7 +16,7 @@ def thetaMS( p, x, Q = 1 ):
     '''
     return 13.6 / ( Beta(p) * p ) * Q * math.sqrt( x ) * ( 1 + 0.038 * math.log( x ) )
 
-class NEXTKalmanFilter(KalmanFMWK.KalmanFilter):
+class NEXTKalmanFilter(KalmanFilter.KalmanFilter):
     Ndim = 4
     
     def TransportMatrix( self, index ):
@@ -59,7 +59,7 @@ class NEXTKalmanFilter(KalmanFMWK.KalmanFilter):
     def NoiseMatrix( self, index ):
         return Array.Identity( 2 ) * 0.01
 
-class NEXTKalmanFilterBis(KalmanFMWK.KalmanFilter):
+class NEXTKalmanFilterBis(KalmanFilter.KalmanFilter):
     '''
         State = ( x - dz tanx, y - dz tany, tanx, tany )
     '''
@@ -67,7 +67,7 @@ class NEXTKalmanFilterBis(KalmanFMWK.KalmanFilter):
     xyresolution = 0.1 # cm
     
     def __init__( self, p0 = 2.49 ): # MeV
-        KalmanFMWK.KalmanFilter.__init__( self, name = 'NEXT Kalman Filter' )
+        KalmanFilter.KalmanFilter.__init__( self, name = 'NEXT Kalman Filter' )
         self.p0 = p0
         self.p  = p0
     
@@ -105,26 +105,7 @@ class NEXTKalmanFilterBis(KalmanFMWK.KalmanFilter):
     def NoiseMatrix( self, index ):
         return Array.Identity(2) * self.xyresolution**2
 
-class PyKal( ialex.IAlg ):
-    def __init__( self, measurements = [], name = 'NEXTKalmanFilter' ):
-        ialex.IAlg.__init__( self, name )
-        self.measurements = copy.deepcopy(measurements)
-    
-    def define( self ):
-        self.p0 = 2.49 #MeV
-    
-    def initialize( self ):
-        self.KF = NEXTKalmanFilterBis( self.p0 )
-        return
-    
-    def execute( self ):
-        
-        return True
-    
-    def finalize( self ):
-        return
-
-class TrigoKF( KalmanFMWK.KalmanFilter ):
+class TrigoKF( KalmanFilter.KalmanFilter ):
     '''
         State = ( x, y, tantheta, tanphi )
     '''
@@ -132,11 +113,11 @@ class TrigoKF( KalmanFMWK.KalmanFilter ):
     xyresolution = 0.1 # cm
     
     def __init__( self ):
-        KalmanFMWK.KalmanFilter.__init__( self, name = 'Trigo Kalman Filter' )
+        KalmanFilter.KalmanFilter.__init__( self, name = 'Trigo Kalman Filter' )
     
     def TransportMatrix( self, index ):
         z = self.Track.GetNode(index).running
-        return Array.Matrix( [ 1., 0., z , 1. ],
+        return Array.Matrix( [ 1., 0., z , 0. ],
                              [ 0., 1., z , 0. ],
                              [ 0., 0., 1., 0. ],
                              [ 0., 0., 0., 1. ])
@@ -160,7 +141,7 @@ if __name__ == '__main__':
     Nhits        = 500
     hits         = [ Array.Vector( math.sin(0.01*i) + R.Gaus(0,.1), -math.cos(0.1*i) + R.Gaus(0,.1) ) for i in range(Nhits) ]
     runnings     = map( float, range(Nhits) )
-    measurements = [ KalmanFMWK.KalmanMeasurement( h, V ) for h in hits ]
+    measurements = [ KalmanFilter.KalmanData( h, V ) for h in hits ]
     istate       = Array.Vector( hits[0][0], hits[0][1], 0., 0. )
     istate       = Array.Vector( 0., 0., 0., 0. )
     icvmatrix    = Array.Identity(4) * 2
@@ -168,7 +149,7 @@ if __name__ == '__main__':
     nextkf = NEXTKalmanFilterBis( 2.49 )
     nextkf = TrigoKF()
     nextkf.SetMeasurements( runnings, measurements )
-    nextkf.SetInitialState( KalmanFMWK.KalmanMeasurement( istate, icvmatrix ) )
+    nextkf.SetInitialState( KalmanFilter.KalmanData( istate, icvmatrix ) )
     track = nextkf.Fit()
     p = track.Plot()
     p3 = track.Plot3D()
@@ -183,7 +164,7 @@ if __name__ == '__main__':
 #    import ROOT
 #    
 #    ### Free fall example
-#    class FreeFall( KalmanFMWK.KalmanFilter ):
+#    class FreeFall( KalmanFilter.KalmanFilter ):
 #        #### State variables:
 #        #### [ y_k, y'_k, g ] where ' denotes time derivative
 #        
@@ -209,7 +190,7 @@ if __name__ == '__main__':
 #    FreeFallExample = FreeFall()
 #    
 #    measurements = GenerateData()
-#    initialstate = KalmanMeasurement( Array.Vector( 100., 0., 9.81 ), Array.Matrix( [1.,0.,0.],[0.,1.,0.],[0.,0.,0.] ) )
+#    initialstate = KalmanData( Array.Vector( 100., 0., 9.81 ), Array.Matrix( [1.,0.,0.],[0.,1.,0.],[0.,0.,0.] ) )
 #
 #    FreeFallExample.SetMeasurements( measurements )
 #    FreeFallExample.SetInitialState( initialstate )
