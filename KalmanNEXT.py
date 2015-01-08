@@ -1,7 +1,6 @@
-#import ialex
 import Array
 import math
-import KalmanFilter
+from KalmanFilter import KalmanFilter, KalmanData
 import Physics
 
 def Beta( p, m = Physics.Constants.me ):
@@ -16,50 +15,7 @@ def thetaMS( p, x, Q = 1 ):
     '''
     return 13.6 / ( Beta(p) * p ) * Q * math.sqrt( x ) * ( 1 + 0.038 * math.log( x ) )
 
-class NEXTKalmanFilter(KalmanFilter.KalmanFilter):
-    Ndim = 4
-    
-    def TransportMatrix( self, index ):
-        return Array.Matrix([1.,0.,z0,0.],
-                            [0.,1.,0.,z0],
-                            [0.,0.,1.,0.],
-                            [0.,0.,0.,1.])
-
-
-    def MeasurementMatrix( self, index ):
-        return Array.Matrix( [1.,0.,z0,0.],
-                             [0.,1.,0.,z0])
-    
-    def MultipleScatteringMatrix( self, index ):
-        dz =self.system.Nodes[k].ZSlice.dz
-        z0 =self.system.Nodes[k].ZSlice.Zi
-        z02=z0*z0;
-        edep = self.system.Nodes[k].ZSlice.Edep*1.
-        Lr = self.system.Nodes[k].ZSlice.Lr
-        L=abs(dz)/Lr
-        
-        stateDict=self.system.States[k-1]
-        state =stateDict["F"]
-        
-        ak = state.V
-        p1 = ak[0]
-        p2 = ak[1]
-        p3 = ak[2]
-        p4 = ak[3]
-        
-        p3p3 = s2tms*(1+p3**2)*(1+p3**2+p4**2)
-        p4p4 =  s2tms*(1+p4**2)*(1+p3**2+p4**2)
-        p3p4 = s2tms*p3*p4*(1+p3**2+p4**2)
-        
-        return Array.Matrix( [  z02*p3p3,  z02*p3p4, -z0*p3p3, -z0*p3p4],
-                             [  z02*p3p4,  z02*p4p4, -z0*p3p4, -z0*p4p4],
-                             [ -z0 *p3p3, -z0 *p3p4,     p3p3,     p3p4],
-                             [ -z0 *p3p4, -z0 *p4p4,     p3p4,     p4p4])
-
-    def NoiseMatrix( self, index ):
-        return Array.Identity( 2 ) * 0.01
-
-class NEXTKalmanFilterBis(KalmanFilter.KalmanFilter):
+class NEXTKF(KalmanFilter):
     '''
         State = ( x - dz tanx, y - dz tany, tanx, tany )
     '''
@@ -67,7 +23,7 @@ class NEXTKalmanFilterBis(KalmanFilter.KalmanFilter):
     xyresolution = 0.1 # cm
     
     def __init__( self, p0 = 2.49 ): # MeV
-        KalmanFilter.KalmanFilter.__init__( self, name = 'NEXT Kalman Filter' )
+        KalmanFilter.__init__( self, name = 'NEXT Kalman Filter' )
         self.p0 = p0
         self.p  = p0
     
@@ -105,7 +61,7 @@ class NEXTKalmanFilterBis(KalmanFilter.KalmanFilter):
     def NoiseMatrix( self, index ):
         return Array.Identity(2) * self.xyresolution**2
 
-class TrigoKF( KalmanFilter.KalmanFilter ):
+class TrigoKF( KalmanFilter ):
     '''
         State = ( x, y, tantheta, tanphi )
     '''
@@ -113,7 +69,7 @@ class TrigoKF( KalmanFilter.KalmanFilter ):
     xyresolution = 0.1 # cm
     
     def __init__( self ):
-        KalmanFilter.KalmanFilter.__init__( self, name = 'Trigo Kalman Filter' )
+        KalmanFilter.__init__( self, name = 'Trigo Kalman Filter' )
     
     def TransportMatrix( self, index ):
         z = self.Track.GetNode(index).running
@@ -141,15 +97,15 @@ if __name__ == '__main__':
     Nhits        = 500
     hits         = [ Array.Vector( math.sin(0.01*i) + R.Gaus(0,.1), -math.cos(0.1*i) + R.Gaus(0,.1) ) for i in range(Nhits) ]
     runnings     = map( float, range(Nhits) )
-    measurements = [ KalmanFilter.KalmanData( h, V ) for h in hits ]
+    measurements = [ KalmanData( h, V ) for h in hits ]
     istate       = Array.Vector( hits[0][0], hits[0][1], 0., 0. )
     istate       = Array.Vector( 0., 0., 0., 0. )
     icvmatrix    = Array.Identity(4) * 2
     
-    nextkf = NEXTKalmanFilterBis( 2.49 )
+    nextkf = NEXTKF()
     nextkf = TrigoKF()
     nextkf.SetMeasurements( runnings, measurements )
-    nextkf.SetInitialState( KalmanFilter.KalmanData( istate, icvmatrix ) )
+    nextkf.SetInitialState( KalmanData( istate, icvmatrix ) )
     track = nextkf.Fit()
     p = track.Plot()
     p3 = track.Plot3D()
@@ -164,7 +120,7 @@ if __name__ == '__main__':
 #    import ROOT
 #    
 #    ### Free fall example
-#    class FreeFall( KalmanFilter.KalmanFilter ):
+#    class FreeFall( KalmanFilter ):
 #        #### State variables:
 #        #### [ y_k, y'_k, g ] where ' denotes time derivative
 #        
