@@ -1,9 +1,4 @@
-class Constants:
-    c    = 299792458.    # speed of light in m/s
-    e    = 1.6021766e-19 # electron charge in C
-    me   = 0.510998928   # electron mass in MeV/c2
-    rho0 = 2.6867774e19  # density of a gas at T = 0 K and P = 1 atm in 1/cm3
-    NA   = 6.02214179e23 # Avogadro constant in 1/mol
+from Physics import Constants
 
 class NEXT:
     '''
@@ -20,3 +15,5 @@ class NEXT:
         self.A   = 131.293            # Xe nuclear mass in amu
         self.rho = Constants.rho0 * self.P / self.T * self.A / Constants.NA # Xe density in 1/cm3
         self.x0  = self.X0 / self.rho # Xe radiation length in cm
+
+class KFNEXT:
