@@ -28,6 +28,12 @@ class KalmanData:
         '''
         return bool( len(self) )
 
+    def __nonzero__( self ):
+        '''
+            Boolness of class.
+        '''
+        return self.__bool__()
+
     def __str__( self ):
         '''
             String representation for printing purposes.
@@ -61,6 +67,8 @@ class KalmanNode:
         self.Sresiduals = Sresiduals
         self.chi2       = chi2
         self.cumchi2    = cumchi2
+        self.status     = 3 if Sstate else 2 if Fstate else 1 if Pstate else 0
+    
 
     def __str__( self ):
         '''
@@ -123,8 +131,8 @@ class KalmanTrack:
             Plot the track.
         '''
         import ROOT
-        xmeasurements = ROOT.TGraph()
-        ymeasurements = ROOT.TGraph()
+        xmeasurements = ROOT.TGraph(); xmeasurements.SetTitle('xz projection')
+        ymeasurements = ROOT.TGraph(); ymeasurements.SetTitle('yz projection')
         xfiltered     = ROOT.TGraph()
         yfiltered     = ROOT.TGraph()
         xsmoothed     = ROOT.TGraph()
@@ -132,8 +140,8 @@ class KalmanTrack:
         
         xmeasurements.SetMarkerStyle(20)
         ymeasurements.SetMarkerStyle(20)
-        xfiltered.SetMarkerStyle(29)
-        yfiltered.SetMarkerStyle(29)
+        xfiltered.SetMarkerStyle(33)
+        yfiltered.SetMarkerStyle(33)
         xsmoothed.SetMarkerStyle(34)
         ysmoothed.SetMarkerStyle(34)
 
@@ -141,10 +149,10 @@ class KalmanTrack:
         ymeasurements.SetMarkerColor(1)
         xfiltered.SetMarkerColor(3)
         yfiltered.SetMarkerColor(3)
-        xsmoothed.SetMarkerColor(34)
-        ysmoothed.SetMarkerColor(34)
+        xsmoothed.SetMarkerColor(4)
+        ysmoothed.SetMarkerColor(4)
 
-        for node in self.nodes[:-1]:
+        for node in self.nodes:
             xmeasurements.SetPoint( node.step, node.running, node.hit.State[0] )
             ymeasurements.SetPoint( node.step, node.running, node.hit.State[1] )
             xfiltered    .SetPoint( node.step, node.running, node.Fstate.State[0] )
@@ -152,17 +160,20 @@ class KalmanTrack:
             xsmoothed    .SetPoint( node.step, node.running, node.Sstate.State[0] )
             ysmoothed    .SetPoint( node.step, node.running, node.Sstate.State[1] )
 
-        cx = ROOT.TCanvas()
+        canvas = ROOT.TCanvas()
+        canvas.Divide(2)
+        canvas.cd(1)
         xmeasurements.Draw('AP')
         xfiltered.Draw('P')
         xsmoothed.Draw('P')
-
-        cy = ROOT.TCanvas()
+        canvas.cd(2)
         ymeasurements.Draw('AP')
         yfiltered.Draw('P')
         ysmoothed.Draw('P')
-        
-        return cx, xmeasurements, xfiltered, xsmoothed, cy, ymeasurements, yfiltered, ysmoothed
+        canvas.Modified()
+        canvas.Update()
+        self._graphics = [ canvas, xmeasurements, xfiltered, xsmoothed, ymeasurements, yfiltered, ysmoothed ]
+        return self._graphics
     
     def Plot3D( self ):
         import ROOT
@@ -188,7 +199,8 @@ class KalmanTrack:
         filtered    .Draw('Clinesame')
         smoothed    .Draw('Clinesame')
         
-        return c, measurements, filtered, smoothed
+        self._graphics3 = [c, measurements, filtered, smoothed]
+        return self._graphics3
     
     def __str__( self ):
         '''
@@ -226,11 +238,13 @@ class KalmanFilter:
         self.Mdim        = len(First.hit.State)
         self.IState      = True
     
+        First.status = 2
+    
     def SetTrue( self, hits ):
         '''
             Sets "hits" as the true hits of the track.
         '''
-        assert self.HaveMeasurements, 'True hits cannot be setted before measurements. True hits not included.'
+        assert self.Measurements, 'True hits cannot be setted before measurements. True hits not included.'
         
         indices = range( len(hits) )
         for i,hit in enumerate(hits):
@@ -246,21 +260,21 @@ class KalmanFilter:
         
         self.Measurements = True # Now we can compute stuff
 
-    def TransportMatrix( self, index ):
+    def TransportMatrix( self, index0, index1 ):
         '''
             To be coded in the particular implementation.
         '''
         raise NotImplementedError('TransportMatrix is not defined.')
         return
     
-    def MeasurementMatrix( self, index ):
+    def MeasurementMatrix( self, index0, index1 ):
         '''
             To be coded in the particular implementation.
         '''
         raise NotImplementedError('MeasurementMatrix is not defined.')
         return
     
-    def MultipleScatteringMatrix( self, index ):
+    def MultipleScatteringMatrix( self, index0, index1 ):
         '''
             To be coded in the particular implementation.
         '''
@@ -282,23 +296,23 @@ class KalmanFilter:
         if not index:
             raise ValueError( 'The initial step cannot be predicted' )
         
-        ### Predicting
         Last = self.Track.GetNode( index - 1 )
         This = self.Track.GetNode( index )
         Hit  = This.hit.State
-
-        TMatrix   = self.TransportMatrix( index )
-        MSMatrix  = self.MultipleScatteringMatrix( index )
-        MMMatrix  = self.MeasurementMatrix( index )
+        
+        TMatrix   = self.TransportMatrix( index - 1, index )
+        MSMatrix  = self.MultipleScatteringMatrix( index - 1, index )
+        MMMatrix  = self.MeasurementMatrix( index - 1, index )
         NMatrix   = self.NoiseMatrix( index )
         
-        TMatrixT  = TMatrix.T()
+        TMatrixT  = TMatrix .T()
         MMMatrixT = MMMatrix.T()
         NMatrixI  = NMatrix.Inverse()
         
         x0 = Last.Fstate.State
         C0 = Last.Fstate.CovarianceMatrix
         
+        ### Predicting
         x_predicted = TMatrix ** x0
         C_predicted = TMatrix ** C0 ** TMatrixT + MSMatrix
         
@@ -308,52 +322,64 @@ class KalmanFilter:
         This.Pstate     = KalmanData( x_predicted, C_predicted )
         This.Presiduals = KalmanData( r_predicted, R_predicted )
         
+        This.status = 1
+        
         ### Filtering
         C_filtered = ( C_predicted.Inverse() + MMMatrixT ** NMatrixI ** MMMatrix ).Inverse()
         GainMatrix = C_filtered ** MMMatrixT ** NMatrixI
-        x_filtered = x0 + GainMatrix ** ( Hit - MMMatrix ** x0 )
+        x_filtered = x_predicted + GainMatrix ** r_predicted
         
         projector  = _IdentityMatrix( self.Mdim ) - MMMatrix ** GainMatrix
         r_filtered = projector ** r_predicted
         R_filtered = projector ** NMatrix
         
         chi2plus = r_filtered ** R_filtered.Inverse() ** r_filtered
-        newchi2  = Last.cumchi2 + chi2plus
-        
+#        xdif = x_filtered - x_predicted
+#        chi2plus = r_filtered ** NMatrixI ** r_filtered + xdif ** C_predicted.Inverse() ** xdif
+
         This.Fstate     = KalmanData( x_filtered, C_filtered )
         This.Fresiduals = KalmanData( r_filtered, R_filtered )
         This.chi2       = chi2plus
-        This.cumchi2    = newchi2
-    
+        This.cumchi2    = Last.cumchi2 + This.chi2
+        
+        This.status = 2
+        
     def Smooth( self, index ):
         '''
             Smooth the index-th step.
         '''
+        if index == self.Track.Nnodes - 1:
+            raise ValueError( 'The last step cannot be smoothed' )
+        
         Next = self.Track.GetNode( index + 1 )
         This = self.Track.GetNode( index     )
         Hit  = This.hit.State
         
-        MMMatrix  = self.MeasurementMatrix( index )
+        MMMatrix  = self.MeasurementMatrix( index + 1, index )
         NMatrix   = self.NoiseMatrix( index )
         MMMatrixT = MMMatrix.T()
-        TMatrixT  = self.TransportMatrix( index ).T()
+        TMatrixT  = self.TransportMatrix( index + 1, index ).T()
         
         x0  = This.Fstate.State
         C0  = This.Fstate.CovarianceMatrix
         x1p = Next.Pstate.State
         C1p = Next.Pstate.CovarianceMatrix
+        x1f = Next.Fstate.State
+        C1f = Next.Fstate.CovarianceMatrix
         x1s = Next.Sstate.State
         C1s = Next.Sstate.CovarianceMatrix
         
         GainMatrix = C0 ** TMatrixT   ** C1p.Inverse()
-        x_smooth   = x0  + GainMatrix ** ( x1s - x1p )
-        C_smooth   = C0  + GainMatrix ** ( C1s - C1p ) ** GainMatrix.T()
+        x_smooth   = x0  + GainMatrix ** ( x1s - x1f )
+        C_smooth   = C0  + GainMatrix ** ( C1s - C1f ) ** GainMatrix.T()
         
         r_smooth   = Hit - MMMatrix ** x_smooth
         R_smooth   = NMatrix - MMMatrix ** C_smooth ** MMMatrixT
     
         This.Sstate     = KalmanData( x_smooth, C_smooth )
         This.Sresiduals = KalmanData( r_smooth, R_smooth )
+        
+        This.status = 3
     
     def Fit( self ):
         assert self.IState and self.Measurements, '''
@@ -363,8 +389,8 @@ class KalmanFilter:
         for i in range( 1, self.Track.Nnodes ):
             self.Filter( i )
         
-        LastNode = self.Track.GetNode(-1)
-        LastNode.Sstate = LastNode.Fstate
+        LastNode            = self.Track.GetNode(-1)
+        LastNode.Sstate     = LastNode.Fstate
         LastNode.Sresiduals = LastNode.Fresiduals
         
         for i in reversed(range( self.Track.Nnodes - 1 )):
