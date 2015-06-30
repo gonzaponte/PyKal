@@ -20,3 +20,6 @@ class NEXT:
         self.A   = 131.293            # Xe nuclear mass in amu
         self.rho = Constants.rho0 * self.P / self.T * self.A / Constants.NA # Xe density in 1/cm3
         self.x0  = self.X0 / self.rho # Xe radiation length in cm
+
+def K2P( k, m = Constants.me ):
+    return ( k * ( k + 2*m ) ) ** 0.5
