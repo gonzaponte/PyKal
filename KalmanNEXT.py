@@ -94,7 +94,8 @@ class KFNEXT(KalmanFilter):
         State = ( x, y, tanx, tany, E )
     '''
     xyresolution = 0.1 # cm
-    Eresolution  = 0.1 # MeV
+#    Eresolution  = 0.01 #/ 2.458 # MeV
+    Eresolution  = 0.01 * 2.458**0.5 #/ 2.458 # MeV
     
     xyres2 = xyresolution**2
     Eres2  = Eresolution**2
@@ -102,6 +103,14 @@ class KFNEXT(KalmanFilter):
     def __init__( self, P = 15., T = 27. ):
         KalmanFilter.__init__( self, name = 'NEXT Kalman Filter' )
         self.gas = NEXT( P, T )
+    
+    def SetMeasurements( self, runs, hits ):
+        KalmanFilter.SetMeasurements( self, runs, hits )
+        
+        totalE = sum( hit.State[-1] for hit in hits )
+        for i,hit in enumerate(hits):
+            self.Track.GetNode(i).ParticleEnergy = totalE
+            totalE -= hit.State[-1]
     
     def TransportMatrix( self, index0, index1 ):
         This  = self.Track.GetNode(index0)
@@ -116,7 +125,7 @@ class KFNEXT(KalmanFilter):
         F = Array.Identity( self.Sdim )
         F[0][2]   = dz
         F[1][3]   = dz
-        F[-1][-1] = self.Eloss( state[-1], ds )
+        F[-1][-1] = self.Eloss( This.ParticleEnergy, ds ) / This.hit.State[-1]
         return F
     
     def MeasurementMatrix( self, index0, index1 ):
@@ -127,28 +136,34 @@ class KFNEXT(KalmanFilter):
     def MultipleScatteringMatrix( self, index0, index1 ):
         This  = self.Track.GetNode(index0)
         Other = self.Track.GetNode(index1)
+
+        dx, dy, tx, ty, e = This.Pstate.State
+
         z0    = This.running
         z02   = z0**2;
         z1    = Other.running
-        L     = abs( z1 - z0 ) / self.gas.x0 #* 0.1
-        
-        dx, dy, tx, ty, e = This.Pstate.State
-        theta02 = thetaMS( K2P(e) , L )**2
+        dz    = z1 - z0
+        ds    = abs(dz) * ( tx**2 + ty**2 + 1 ) ** 0.5
+        L     = ds / self.gas.x0
+        theta02 = thetaMS( K2P(This.ParticleEnergy) , L )**2
         
         factor = theta02 * ( 1 + tx**2 + ty**2 )
         p33 =  factor * ( 1 + tx**2 )
         p44 =  factor * ( 1 + ty**2 )
         p34 =  factor *  tx * ty
         
+        state  = This.Pstate.State if This.status < 2 else This.Fstate.State
+        self.Eres2 = self.Eresolution**2 / state[-1]
+
         return Array.Matrix( [  z02 * p33/3,  z02 * p34/3, -z0 * p33/2, -z0 * p34/2,      0.    ],
                              [  z02 * p34/3,  z02 * p44/3, -z0 * p34/2, -z0 * p44/2,      0.    ],
                              [ -z0  * p33/2, -z0  * p34/2,       p33  ,       p34  ,      0.    ],
                              [ -z0  * p34/2, -z0  * p44/2,       p34  ,       p44  ,      0.    ],
-                             [         0.,         0.,        0.,           0.     , self.Eres2 ])
+                             [         0.,         0.,        0.,           0.     , self.Eres2 ])# * 10.
     
     def NoiseMatrix( self, index ):
         V = Array.Identity(self.Mdim) * self.xyres2
-        V[-1][-1] = self.Eres2
+        V[-1][-1] = self.Eresolution**2 / self.Track.GetNode(index).hit.State[-1]
         return V
     
     def Eloss( self, e0, ds ):
