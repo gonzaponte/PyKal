@@ -189,11 +189,21 @@ class KalmanTrack:
         filtered    .SetLineColor(2)
         smoothed    .SetLineColor(4)
         
-        for node in self.nodes[:-1]:
-            measurements.SetPoint( node.step, node.running, node.hit.State[0]   , node.hit.State[1]     )
+        for node in self.nodes:
+            measurements.SetPoint( node.step, node.running, node.hit.State[0]   , node.hit.State[1]    )
             filtered    .SetPoint( node.step, node.running, node.Fstate.State[0], node.Fstate.State[1] )
             smoothed    .SetPoint( node.step, node.running, node.Sstate.State[0], node.Sstate.State[1] )
-        
+
+        measurements.GetXaxis().SetTitle('z')
+        measurements.GetYaxis().SetTitle('x')
+        measurements.GetZaxis().SetTitle('y')
+        filtered.GetXaxis().SetTitle('z')
+        filtered.GetYaxis().SetTitle('x')
+        filtered.GetZaxis().SetTitle('y')
+        smoothed.GetXaxis().SetTitle('z')
+        smoothed.GetYaxis().SetTitle('x')
+        smoothed.GetZaxis().SetTitle('y')
+
         c = ROOT.TCanvas()
         measurements.Draw('AP')
         filtered    .Draw('Clinesame')
@@ -341,7 +351,7 @@ class KalmanFilter:
         This.Fresiduals = KalmanData( r_filtered, R_filtered )
         This.chi2       = chi2plus
         This.cumchi2    = Last.cumchi2 + This.chi2
-        
+#        This.chi2       = This.cumchi2
         This.status = 2
         
     def Smooth( self, index ):
