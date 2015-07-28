@@ -23,3 +23,4 @@ class NEXT:
 
 def K2P( k, m = Constants.me ):
     return ( k * ( k + 2*m ) ) ** 0.5
+
