@@ -6,7 +6,8 @@ from KalmanFilter import KalmanFilter, KalmanData
 from Physics import Constants, NEXT
 from KalmanNEXT import NEXTKF, KFNEXT
 
-ifile = shelve.open('../PyKalman/Analysis/singlebeta.shelve')
+#ifile = shelve.open('../PyKalman/Analysis/singlebeta.shelve')
+ifile = shelve.open('../PyKalman/Analysis/singlebeta_voxelized.shelve')
 E0 = 2.5
 
 _R = random.Random()
@@ -30,34 +31,46 @@ def single_track():
     chi2.Draw('AP')
     raw_input()
 
-def Randomize( x, sigma ):
+def Randomize( x, sigma, minval = -float('inf'), maxval = float('inf') ):
+    
+    if not isinstance(sigma, list):
+        sigma = [ sigma ] * len(x)
     for i in range(len(x)):
-        x[i] += _R.gauss(0.,sigma)
+        smear = _R.gauss(0.,sigma[i])
+        if minval < x[i] + smear < maxval:
+            x[i] += smear
+        else:
+            x[i] = minval if smear < 0 else maxval
 
 def full():
     for t in range( ifile['N'] ):
         x,y,z,u,u,u,e = map( list, zip(*ifile[str(t)]) )
-        Randomize(x,.1)
-        Randomize(y,.1)
-        Randomize(z,.1)
-#        Randomize(e,.1)
-        XYEMatrix = Diagonal( [1., 1., 100.] )
-        hits = [ KalmanData( Vector(*xye), XYEMatrix) for xye in zip(x,y,e) ]
+        ### mm -> cm
+        x = [ xi*1e-1 for xi in x ]
+        y = [ yi*1e-1 for yi in y ]
+        z = [ zi*1e-1 for zi in z ]
+        
+        ### randomize hits according to resolution
+#        Randomize(x,1e-2)
+#        Randomize(y,1e-2)
+#        Randomize(e,[0.01*(2.458/ei)**0.5 for ei in e], 1e-8)
+
+        xres = 0.1**2
+        eres = lambda e: 0.01*(2.458/e)**0.5
+        hits = [ KalmanData( Vector(*xye), Diagonal( [ xres, xres, eres(xye[-1])] )) for xye in zip(x,y,e) ]
+#        for hit in hits: print hit
 #        kf = NEXTKF()
         kf = KFNEXT()
         kf.SetMeasurements(z,hits)
-        x0  = 0.
-        y0  = 0.
+        x0  = x[0]
+        y0  = y[0]
         tx0 = ( x[1] - x[0] ) / ( z[1] - z[0] )
         ty0 = ( y[1] - y[0] ) / ( z[1] - z[0] )
-        kf.SetInitialState( KalmanData( Vector(x0,y0,tx0,ty0,E0), Identity(5)*1 ) )
+        e0  = e[0]
+        kf.SetInitialState( KalmanData( Vector(x0,y0,tx0,ty0,e0), Identity(5)*10 ) )
         
         track = kf.Fit()
-#        print '\n'*10
-#        print 'tnumber',t
-#        print '\n'*2
-#        print track
-
+        
         p     = track.Plot()
         p3    = track.Plot3D()
         cchi  = ROOT.TCanvas()
